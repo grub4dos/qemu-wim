@@ -29,3 +29,6 @@ cp -r hda/* /mnt/hda_img/
 # Unmount the partition and detach the loop device
 umount /mnt/hda_img
 losetup -d $LOOPDEV
+
+# Convert hda.img to qcow2 format with compression enabled
+qemu-img convert -O qcow2 -c hda.img hda.qcow2

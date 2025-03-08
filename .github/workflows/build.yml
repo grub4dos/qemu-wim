@@ -16,7 +16,7 @@ jobs:
         run: |
           # Update package list and install required tools
           sudo apt-get update
-          sudo apt-get install -y parted dosfstools
+          sudo apt-get install -y parted dosfstools qemu-utils
 
       - name: Run pack-hda.sh script
         run: |
@@ -27,4 +27,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: hda-img
-          path: hda.img
+          path: hda.qcow2
