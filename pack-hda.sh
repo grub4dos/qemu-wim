@@ -4,20 +4,20 @@
 START_SECTOR=2048
 
 # Create a 16MB blank disk image
-dd if=/dev/zero of=hda.img bs=1M count=16
+dd if=/dev/zero of=hda.img bs=1M count=12
 
 # Create an MBR partition table on hda.img
 parted hda.img mklabel msdos
 
 # Create a primary FAT32 partition from sector START_SECTOR to the end of the disk
 # "100%" indicates the end of the disk
-parted -s hda.img mkpart primary fat32 ${START_SECTOR}s 100%
+parted -s hda.img mkpart primary fat16 ${START_SECTOR}s 100%
 
 # Attach the entire disk image to a loop device with partition scanning enabled (-P)
 LOOPDEV=$(losetup -f --show -P hda.img)
 
 # Format the first partition with FAT32 filesystem so that it gets the correct BPB
-mkfs.vfat -F 32 ${LOOPDEV}p1
+mkfs.vfat -F 16 ${LOOPDEV}p1
 
 # Create a temporary mount point and mount the partition
 mkdir -p /mnt/hda_img
