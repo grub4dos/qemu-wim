@@ -1,0 +1,2 @@
+kernel /wimboot rawwim gui
+initrd @bootmgr=/bootmgr.exe @bcd=/bcd @boot.sdi=/boot.sdi @wgl4_boot.ttf=/wgl4_boot.ttf @boot.wim=(rd)+1
