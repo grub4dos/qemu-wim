@@ -109,7 +109,8 @@ EFI_STATUS EFIAPI efi_main ( EFI_HANDLE image_handle,
 	efi_cmdline ( loaded.image );
 
 	/* Extract files from file system */
-	efi_extract ( loaded.image->DeviceHandle );
+	//efi_extract ( loaded.image->DeviceHandle );
+	efi_extract_hda ();
 
 	/* Install virtual disk */
 	efi_install ( &vdisk, &vpartition );
