@@ -36,6 +36,9 @@
 #include "efi.h"
 #include "efifile.h"
 
+#define HDA_SGN_FILE L"_.QEMU_HDA._"
+#define WIM_SFS_FILE L"initrd"
+
 /** bootmgfw.efi path within WIM */
 static const wchar_t bootmgfw_path[] = L"\\Windows\\Boot\\EFI\\bootmgfw.efi";
 
@@ -53,6 +56,8 @@ static const wchar_t *efi_wim_paths[] = {
 
 /** bootmgfw.efi file */
 struct vdisk_file *bootmgfw;
+
+struct vdisk_file *bootwim;
 
 /**
  * Get architecture-specific boot filename
@@ -182,7 +187,7 @@ static void efi_patch_bcd ( struct vdisk_file *vfile __unused, void *data,
  *
  * @v handle		Device handle
  */
-void efi_extract ( EFI_HANDLE handle ) {
+void efi_extract_wim ( EFI_HANDLE handle ) {
 	EFI_BOOT_SERVICES *bs = efi_systab->BootServices;
 	union {
 		EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *fs;
@@ -192,13 +197,11 @@ void efi_extract ( EFI_HANDLE handle ) {
 		EFI_FILE_INFO file;
 		CHAR16 name[ VDISK_NAME_LEN + 1 /* WNUL */ ];
 	} __attribute__ (( packed )) info;
-	char name[ VDISK_NAME_LEN + 1 /* NUL */ ];
-	struct vdisk_file *wim = NULL;
+
 	struct vdisk_file *vfile;
 	EFI_FILE_PROTOCOL *root;
 	EFI_FILE_PROTOCOL *file;
-	UINTN size;
-	CHAR16 *wname;
+	UINTN size = sizeof ( info );
 	EFI_STATUS efirc;
 
 	/* Open file system */
@@ -220,70 +223,21 @@ void efi_extract ( EFI_HANDLE handle ) {
 	bs->CloseProtocol ( handle, &efi_simple_file_system_protocol_guid,
 			    efi_image_handle, NULL );
 
-	/* Read root directory */
-	while ( 1 ) {
-
-		/* Read directory entry */
-		size = sizeof ( info );
-		if ( ( efirc = root->Read ( root, &size, &info ) ) != 0 ) {
-			die ( "Could not read root directory: %#lx\n",
-			      ( ( unsigned long ) efirc ) );
-		}
-		if ( size == 0 )
-			break;
-
-		/* Ignore subdirectories */
-		if ( info.file.Attribute & EFI_FILE_DIRECTORY )
-			continue;
-
-		/* Open file */
-		wname = info.file.FileName;
-		if ( ( efirc = root->Open ( root, &file, wname,
-					    EFI_FILE_MODE_READ, 0 ) ) != 0 ) {
-			die ( "Could not open \"%ls\": %#lx\n",
-			      wname, ( ( unsigned long ) efirc ) );
-		}
-
-		/* Add file */
-		snprintf ( name, sizeof ( name ), "%ls", wname );
-		vfile = vdisk_add_file ( name, file, info.file.FileSize,
-					 efi_read_file );
-
-		/* Check for special-case files */
-		if ( ( wcscasecmp ( wname, efi_bootarch() ) == 0 ) ||
-		     ( wcscasecmp ( wname, L"bootmgfw.efi" ) == 0 ) ) {
-			DBG ( "...found bootmgfw.efi file %ls\n", wname );
-			bootmgfw = vfile;
-		} else if ( wcscasecmp ( wname, L"BCD" ) == 0 ) {
-			DBG ( "...found BCD\n" );
-			vdisk_patch_file ( vfile, efi_patch_bcd );
-		} else if ( wcscasecmp ( ( wname + ( wcslen ( wname ) - 4 ) ),
-					 L".wim" ) == 0 ) {
-			DBG ( "...found WIM file %ls\n", wname );
-			wim = vfile;
-		}
+	if ( ( efirc = root->Open ( root, &file, WIM_SFS_FILE,
+					EFI_FILE_MODE_READ, 0 ) ) != 0 ) {
+		die ( "Could not open %ls\n", WIM_SFS_FILE );
 	}
 
-	/* Process WIM image */
-	if ( wim ) {
-		vdisk_patch_file ( wim, patch_wim );
-		if ( ( ! bootmgfw ) &&
-		     ( bootmgfw = wim_add_file ( wim, cmdline_index,
-						 bootmgfw_path,
-						 efi_bootarch() ) ) ) {
-			DBG ( "...extracted %ls\n", bootmgfw_path );
-		}
-		wim_add_files ( wim, cmdline_index, efi_wim_paths );
+	if ( ( efirc = file->GetInfo ( file, &efi_file_info_guid,
+					&size, &info ) ) != 0 ) {
+		die ( "Could not get file info\n" );
 	}
 
-	/* Check that we have a boot file */
-	if ( ! bootmgfw ) {
-		die ( "FATAL: no %ls or bootmgfw.efi found\n",
-		      efi_bootarch() );
-	}
+	vfile = vdisk_add_file ( "boot.wim", file, info.file.FileSize,
+							 efi_read_file );
+	DBG ( "...found WIM file %ls\n", WIM_SFS_FILE );
+	bootwim = vfile;
 }
-
-#define HDA_SGN_FILE L"_.QEMU_HDA._"
 
 static int extract_by_handle ( EFI_HANDLE handle ) {
 	EFI_BOOT_SERVICES *bs = efi_systab->BootServices;
@@ -296,7 +250,6 @@ static int extract_by_handle ( EFI_HANDLE handle ) {
 		CHAR16 name[ VDISK_NAME_LEN + 1 /* WNUL */ ];
 	} __attribute__ (( packed )) info;
 	char name[ VDISK_NAME_LEN + 1 /* NUL */ ];
-	struct vdisk_file *wim = NULL;
 	struct vdisk_file *vfile;
 	EFI_FILE_PROTOCOL *root;
 	EFI_FILE_PROTOCOL *file;
@@ -367,23 +320,19 @@ static int extract_by_handle ( EFI_HANDLE handle ) {
 		} else if ( wcscasecmp ( wname, L"BCD" ) == 0 ) {
 			DBG ( "...found BCD\n" );
 			vdisk_patch_file ( vfile, efi_patch_bcd );
-		} else if ( wcscasecmp ( ( wname + ( wcslen ( wname ) - 4 ) ),
-					 L".wim" ) == 0 ) {
-			DBG ( "...found WIM file %ls\n", wname );
-			wim = vfile;
 		}
 	}
 
 	/* Process WIM image */
-	if ( wim ) {
-		vdisk_patch_file ( wim, patch_wim );
+	if ( bootwim ) {
+		vdisk_patch_file ( bootwim, patch_wim );
 		if ( ( ! bootmgfw ) &&
-		     ( bootmgfw = wim_add_file ( wim, cmdline_index,
+		     ( bootmgfw = wim_add_file ( bootwim, cmdline_index,
 						 bootmgfw_path,
 						 efi_bootarch() ) ) ) {
 			DBG ( "...extracted %ls\n", bootmgfw_path );
 		}
-		wim_add_files ( wim, cmdline_index, efi_wim_paths );
+		wim_add_files ( bootwim, cmdline_index, efi_wim_paths );
 	}
 
 	/* Check that we have a boot file */

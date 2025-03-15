@@ -189,7 +189,7 @@ wimboot.%.elf : lib.%.a Makefile
 
 wimboot.i386.efi : \
 wimboot.%.efi : wimboot.%.elf elf2efi32 Makefile
-	./elf2efi32 --hybrid $< $@
+	./elf2efi32 $< $@
 
 wimboot.x86_64.efi wimboot.arm64.efi : \
 wimboot.%.efi : wimboot.%.elf elf2efi64 Makefile
