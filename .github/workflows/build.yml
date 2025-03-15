@@ -16,15 +16,24 @@ jobs:
         run: |
           # Update package list and install required tools
           sudo apt-get update
-          sudo apt-get install -y parted dosfstools qemu-utils
+          sudo apt-get install -y parted dosfstools qemu-utils build-essential gcc-aarch64-linux-gnu
 
       - name: Run pack-hda.sh script
         run: |
           chmod +x pack-hda.sh
           sudo ./pack-hda.sh
 
+      - name: Build wimldr
+        working-directory: src
+        run: |
+          make
+
       - name: Upload hda.img artifact
         uses: actions/upload-artifact@v4
         with:
-          name: hda-img
-          path: hda.qcow2
+          name: wimldr
+          path: |
+            hda.qcow2
+            src/wimldr.x64
+            src/wimldr.ia32
+            src/wimldr.aa64
