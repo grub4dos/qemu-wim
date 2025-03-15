@@ -4,8 +4,8 @@
 *.elf
 *.map
 *.efi
-wimboot.i386
-wimboot.x86_64
-wimboot.arm64
+wimldr.ia32
+wimldr.x64
+wimldr.aa64
 elf2efi32
 elf2efi64
